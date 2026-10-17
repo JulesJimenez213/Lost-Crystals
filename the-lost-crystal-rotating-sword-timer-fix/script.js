@@ -1,3 +1,42 @@
+/* =========================================================
+   THE LOST CRYSTAL - script.js   (version 3)
+   A small top-down pixel-art adventure using HTML5 Canvas.
+
+   NEW IN VERSION 3
+     * SHOOTING ENEMY: the Dark Mage fires magic bolts. Dodge them, or
+       swing your weapon to knock them out of the air!
+     * FALLING ROCKS: a red circle warns you, then a rock crashes down.
+       Step out of the circle before it lands!
+     * BOSS ROOM: finish level 5, enter the portal and fight Zorgon, a giant
+       alien who shoots and summons mini aliens.
+     * VICTORY screen with "Play Again" and "Main Menu" buttons.
+
+   FROM VERSION 2
+     * 5 maps. Bring the crystal home and a PORTAL opens to the next map.
+     * Enemies: slimes, bats and skeletons that wander and chase you.
+     * Equipment: pick up a sword, shield, boots and more. Press SPACE to attack.
+
+   HOW THE FILE IS ORGANIZED
+      1. Constants and settings
+      2. Equipment and enemy definitions
+      3. The levels (maps, enemies, items, colours)
+      4. Pixel-art sprites (drawn from text, no image files!)
+      5. Loading a level
+      6. Game state
+      7. Sound effects (Web Audio API)
+      8. Keyboard input
+      9. Collision detection
+     10. Update (game logic, runs every frame) - includes bullets,
+         falling rocks and the boss
+     11. Drawing (render)
+     12. Start / restart / level changes / win / lose
+     13. The game loop
+   ========================================================= */
+
+
+/* =========================================================
+   1. CONSTANTS AND SETTINGS
+   ========================================================= */
 const TILE = 40;                 // one map square is 40 x 40 pixels
 const PIXEL = 4;                 // one "art pixel" is 4 x 4 screen pixels
 const COLS = 24;                 // map width  in tiles  (24 * 40 = 960)
@@ -36,6 +75,13 @@ const PALETTE = {
   f: '#f2c18d'    // skin
 };
 
+
+/* =========================================================
+   2. EQUIPMENT AND ENEMY DEFINITIONS
+   Want a stronger sword or a tougher monster? Change the numbers here!
+   ========================================================= */
+
+// Things the player can wear or hold. "slot" says where it goes.
 const EQUIPMENT = {
   stick:      { slot: 'weapon', name: 'Wooden Stick',  damage: 1, reach: 30, colour: '#8b5a2b', tip: 'Weak, but better than nothing.' },
   sword:      { slot: 'weapon', name: 'Iron Sword',    damage: 2, reach: 40, colour: '#c4c8d0', tip: 'Damage 2, longer reach!' },
@@ -44,22 +90,45 @@ const EQUIPMENT = {
   boots:      { slot: 'boots',  name: 'Swift Boots',   speedBonus: 0.35,     tip: 'You run 35% faster!' }
 };
 
+// Things lying on the ground that heal you.
 const HEALING = {
   potion: { name: 'Health Potion', heal: 3 },
   heart:  { name: 'Heart',         heal: 2 }
 };
 
+// The monsters. chaseRange = how close you must be before they chase you.
 const ENEMY_TYPES = {
   slime:    { name: 'Slime',    hp: 2, speed: 55, damage: 2, chaseRange: 150, dropChance: 0.35 },
   bat:      { name: 'Bat',      hp: 2, speed: 95, damage: 1, chaseRange: 210, dropChance: 0.25 },
   skeleton: { name: 'Skeleton', hp: 4, speed: 70, damage: 2, chaseRange: 220, dropChance: 0.50 },
 
+  // NEW: the Dark Mage SHOOTS. It keeps its distance and fires a magic bolt at you.
+  //   shootEvery = seconds between shots, shotSpeed = how fast the bolt flies (pixels/second)
   mage:     { name: 'Dark Mage', hp: 3, speed: 60, damage: 1, chaseRange: 330, dropChance: 0.40,
               ranged: true, shootEvery: 2.3, shotSpeed: 175, shotDamage: 1 },
 
+  // NEW: the boss summons these little aliens. They are fast and always chase you.
   alien:    { name: 'Mini Alien', hp: 2, speed: 105, damage: 1, chaseRange: 2000, dropChance: 0.20 }
 };
 
+
+/* =========================================================
+   3. THE LEVELS
+   Each level has:
+     name       - shown on the screen
+     objective  - the goal text
+     theme      - ground colours + a colour swap for the trees and bushes
+     map        - 15 rows of 24 characters (see legend below)
+     enemies    - which monster stands on which tile {type, col, row}
+     items      - what lies on the ground {type, col, row}
+
+   MAP LEGEND
+     T = tree (solid)     R = rock (solid)     b = bush (solid)
+     X = treasure chest (solid) - the crystal floats above it
+     p = path             S = start pad (stone)
+     O = the spot where the PORTAL appears (looks like grass until then)
+     f = flowers (decoration)     . = plain grass
+   ========================================================= */
 const LEVELS = [
 
   /* ---------- LEVEL 1 ---------- */
@@ -69,7 +138,7 @@ const LEVELS = [
     theme: {
       grass: '#4ea64a', grassDark: '#3b8a3f', grassLight: '#6fc45a',
       path: '#d9b074', pathSpeck: '#c49a5c', pathEdge: '#a87b45',
-      swap: null                                   
+      swap: null                                   // normal green trees
     },
     map: [
       'TTTTTTTTTTTTTTTTTTTTTTTT',
@@ -100,6 +169,7 @@ const LEVELS = [
     ]
   },
 
+  /* ---------- LEVEL 2 ---------- */
   {
     name: 'The Autumn Glade',
     objective: 'Find the Autumn Crystal!',
@@ -140,6 +210,7 @@ const LEVELS = [
     ]
   },
 
+  /* ---------- LEVEL 3 ---------- */
   {
     name: 'The Midnight Marsh',
     objective: 'Find the Midnight Crystal!',
